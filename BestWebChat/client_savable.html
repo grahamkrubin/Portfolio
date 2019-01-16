@@ -1,0 +1,267 @@
+<!DOCTYPE html>
+<html lang="en">
+   <head>
+      <script src="/socket.io/socket.io.js"></script>
+      <script>
+         let username;
+         let rooms_arr = [];
+         let users_arr = []; //need to reset on chatroom change
+         let current_chatroom = "";
+         var socketio = io.connect();
+         let logged = false;
+         let onceCalled = false;
+         let roomlist;
+         let isCreator = false;
+         let usernameTaken = false;
+         socketio.on("message_to_client",function(data) { //messages to client
+         //Append an HR thematic break and the escaped HTML of the new message
+         console.log("chatroom is:");
+         console.log(data["chatroom"]);
+         alert(data["user"]);
+         if(data["chatroom"] == current_chatroom){
+            document.getElementById("chatlog").appendChild(document.createElement("hr"));
+            //add all usernames here
+            // document.getElementById("users_in_room").innerHTML += username + ";";
+            // alert(data["user_name"]);
+            // document.getElementById("chatlog").appendChild(document.createTextNode(data['user']+": "));
+            // document.getElementById("chatlog").appendChild(document.createElement("br"));
+            document.getElementById("chatlog").appendChild(document.createTextNode(data['message']));
+         }
+         else{
+            console.log("Not ur room!");
+         }
+      });
+      
+       socketio.on("chatroom_to_client",function(data) {
+         if(logged){
+            rooms_arr.push(data["chatroom"]);
+            showMainPage();
+         }
+      });
+       
+      socketio.on("sent_chatrooms", function(data){
+         if(logged && !onceCalled){
+            console.log("called this sent chatrooms");
+            console.log(data["chatroomlist"]);
+            let chatrooms_split_arr = data["chatroomlist"].split(",");
+            for(let i = 0; i<chatrooms_split_arr.length; i++){
+               if(chatrooms_split_arr[i]!= "" && chatrooms_split_arr[i]!= null){
+                  rooms_arr.push(chatrooms_split_arr[i]);
+               }
+            }
+            console.log(rooms_arr)
+            if(username!="" && username!=null){
+             showMainPage();
+            }
+            onceCalled = true;
+         }
+        
+        //
+        });
+       
+      socketio.on("user_to_chatroom_to_client", function(data) {
+        if(current_chatroom == data["chatroom"]){
+            //isCreator = Boolean(data["isCreator"])
+            
+            console.log("IS CREATOR: :: : :")
+            console.log(data["isCreator"])
+            isCreator = (data["isCreator"] == "true");
+            console.log(isCreator)
+            users_arr = [];
+            let chatroom_users_split_arr = data["chatroom_users"].split(",");
+            for(let i = 0; i<chatroom_users_split_arr.length; i++){
+                   if(chatroom_users_split_arr[i]!= "" && chatroom_users_split_arr[i]!= null){
+                      users_arr.push(chatroom_users_split_arr[i]);
+                   }
+                }
+            console.log(users_arr);
+            
+            let inner_html = "";
+            
+            if (isCreator && username == data["creator"]) {
+                // console.log(data["user"] +"is the current user");
+                for(let i=0; i<users_arr.length; i++){
+                    document.getElementById("users_in_room").innerHTML += "<p>"+users_arr[i]+"  <button class='user_button' id='DM_"+ String(i)+"' onclick='slideInDms("+String(i)+")'>Slide in Dms</button>   <button class='user_button' id='ban_"+String(i)+"'>Ban this bitch</button>";//<br><input type='text' id='DM_message_"+String(i)+"' hidden='true'/><button id='' hidden='true'>Send Dm</button></p>"
+                }
+                isCreator = false;
+            }
+            else{
+                for(let i=0; i<users_arr.length; i++){
+                document.getElementById("users_in_room").innerHTML += "<p>"+users_arr[i]+"   <button class='user_button' id='DM_"+ String(i)+"'>Slide in Dms</button></p>"
+                }
+            }
+            
+        }
+      });
+      
+      socketio.on("user_exists_check", function(data){
+            usernameTaken = data["userExists"];
+            console.log("user exists!")
+            console.log(usernameTaken)
+            if (usernameTaken == "false" && !logged && username == data["user"]){
+                logged = true;
+                requestChatrooms();
+                showMainPage();
+            }
+            if(usernameTaken == "true" && !logged && username == data["user"]){
+                alert("USERNAME TAKEN");
+            }
+      });
+
+      // socketio.on("receive_updated_chatroom_users", function(data) {
+
+      // });
+
+       
+      function requestChatrooms(){
+         socketio.emit("request_chatrooms",{message: "new user"});
+       }
+
+      function sendMessage(){
+         var msg = document.getElementById("message_input").value;
+         // alert("c: " + username);
+         msg = (username + ": " + msg);
+         socketio.emit("message_to_server", {message:msg, chatroom:current_chatroom, user:username});
+      }
+      
+      function login(){
+        username = document.getElementById("username").value;
+        if(username == ""){
+          alert("Your username cannot be blank!");
+        }
+        else{
+            
+            //user_arr.push(username);
+          socketio.emit("user_to_server", {user:username});
+        }
+      }
+      
+      function showMainPage() {
+         document.getElementById("chatroom_creation").hidden = false;
+         document.getElementById("login_info").hidden = true;
+         document.getElementById("join_chatroom").hidden = false;
+        
+        // alert(username);
+         let chatrooms_list = document.getElementById("join_chatroom");
+         chatrooms_list.innerHTML = "<button id='join_button' onclick = 'joinChatroom()' hidden='true'>join</button>";
+         if(rooms_arr.length > 0){
+            for(let i = 0; i <rooms_arr.length; i++){
+            chatrooms_list.innerHTML = "<input type='radio' name = 'chatroom_button' class='chatroom_button' value='"+rooms_arr[i]+"'>" + rooms_arr[i] + "<br>" + chatrooms_list.innerHTML;
+            }
+           document.getElementById("join_button").hidden = false;
+        }
+        else{
+         chatrooms_list.innerHTML += "<div>You must create a new chatroom!</div>";
+        }
+      }
+      
+      
+      function createChatroom(){
+         let newChatroomName = document.getElementById("new_room_name").value;
+         console.log(newChatroomName);
+         let checker = false;
+         for(let i = 0; i<rooms_arr.length; i++){
+            if(rooms_arr[i]==newChatroomName){
+               checker = true;
+            }
+         }
+         if(newChatroomName == ""){
+            alert("Chatroom name cannot be empty!!");
+         }
+         if(checker){
+            alert("Chatroom already exists!");
+         }
+         else{
+            socketio.emit("chatroom_to_server", {chatroom:newChatroomName, user:username});
+            alert("Chatroom created!");
+         }
+         
+         
+         
+      }
+      
+      function joinChatroom(){
+         // alert("b: " + username);
+         console.log("called join chat room")
+         let chatlog = document.getElementById("chatlog");
+         chatlog.innerHTML = "";
+         let chatrooms_created = document.getElementsByClassName("chatroom_button");
+         for(let i = 0; i<chatrooms_created.length; i++){
+            if(chatrooms_created[i].checked){
+              if (current_chatroom != "") {
+                socketio.emit("remove_user_from_chatroom", {chatroom:current_chatroom, user:username});
+              }
+              users_arr = [];
+              current_chatroom = chatrooms_created[i].value;
+              let button_arr = document.getElementsByClassName("user_button");
+              if (button_arr.length > 0) {
+                for (let i = 0; i < button_arr.length; i++) {
+                  button_arr[i].innerHTML = "";
+                }
+              }
+               // let el = document.getElementById("users_in_room").innerHTML = "";
+               // while (el.firstChild) el.removeChild(el.firstChild); // supposed to remove all previous html
+              console.log("the inner html of the buttons: " + String(document.getElementById("users_in_room").innerHTML));
+              socketio.emit("user_to_chatroom_to_server", {chatroom:current_chatroom, user:username});
+              console.log("should have emitted register user");
+            }
+         }
+         console.log("checked one is: ")
+         console.log(current_chatroom);
+         if(current_chatroom == ""){
+            alert("choose a chatroom to join or make a new one!");
+            return;
+         }
+         
+         document.getElementById("message_input").hidden=false;
+         document.getElementById("send_button").hidden=false;
+         document.getElementById("chatlog").hidden=false;
+         document.getElementById("users_in_room").hidden = false;
+         //document.getElementById("join_chatroom").hidden = true;
+         //document.getElementById("chatroom_creation").hidden = true;
+         return false;
+      }
+  
+      function slideInDms(usernumber){
+        let recipient = users_arr[Number(usernumber)];
+        console.log(recipient);
+      }
+
+
+      </script>
+   </head>
+   
+   <body>
+      <div id="login_info">
+         <h5>Set your name:</h5>
+         <input type="text" id="username"/>
+         <button id = "main_page" onclick = "login()" >C'mon in!</button>
+      </div>
+      <br>
+      
+      <div id="chatroom_creation" hidden="true">
+         <h5>Create a chatroom!</h5>
+         <input type="text" id="new_room_name"/>
+         <button id="create_chatroom" onclick = "createChatroom()">Create!</button>
+      </div>
+      
+      <div id="join_chatroom" hidden="true">
+          <form id="chatroom_join_form">
+            
+            <button id="join_button" onclick = "joinChatroom()" hidden="true">join</button>
+          </form>
+      </div>
+      
+      <div id="users_in_room" hidden="true">
+        
+      </div>
+      
+      <input type="text" id="message_input" hidden="true"/>
+      
+      <button id="send_button" onclick = "sendMessage();" hidden="true">send</button>
+      <div id="chatlog" hidden="true"></div>
+      
+      
+   </body>
+   
+</html>
